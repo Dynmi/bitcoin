@@ -8,12 +8,27 @@ Blockchain::Blockchain() : difficulty(4), miningReward(100.0) {
 }
 
 void Blockchain::addTransaction(const Transaction& transaction) {
-    pendingTransactions.push_back(transaction);
+    if (validateTransaction(transaction)) {
+        pendingTransactions.push_back(transaction);
+        
+        // 处理输入UTXO
+        for (const auto& input : transaction.getInputs()) {
+            spendUTXO(input.first, input.second);
+        }
+        
+        // 处理输出UTXO
+        for (size_t i = 0; i < transaction.getOutputs().size(); i++) {
+            const auto& output = transaction.getOutputs()[i];
+            UTXO newUTXO(transaction.getTransactionId(), i, output.first, output.second);
+            addUTXO(newUTXO);
+        }
+    }
 }
 
 void Blockchain::minePendingTransactions(const std::string& minerAddress) {
     // Create mining reward transaction
     Transaction rewardTx("system", minerAddress, miningReward);
+    rewardTx.addOutput(minerAddress, miningReward);
     pendingTransactions.push_back(rewardTx);
     
     // Create new block with pending transactions
@@ -29,18 +44,9 @@ void Blockchain::minePendingTransactions(const std::string& minerAddress) {
 
 double Blockchain::getBalanceOfAddress(const std::string& address) {
     double balance = 0.0;
-    
-    for(const auto& block : chain) {
-        for(const auto& tx : block.getTransactions()) {
-            if(tx.getSender() == address) {
-                balance -= tx.getAmount();
-            }
-            if(tx.getRecipient() == address) {
-                balance += tx.getAmount();
-            }
-        }
+    for (const auto& utxo : getUTXOsForAddress(address)) {
+        balance += utxo.getAmount();
     }
-    
     return balance;
 }
 
@@ -49,15 +55,75 @@ bool Blockchain::isChainValid() const {
         const Block& currentBlock = chain[i];
         const Block& previousBlock = chain[i-1];
         
-        // Check if current block's hash is valid
         if(currentBlock.getHash() != currentBlock.calculateHash()) {
             return false;
         }
         
-        // Check if current block points to previous block
         if(currentBlock.getPreviousHash() != previousBlock.getHash()) {
             return false;
         }
     }
+    return true;
+}
+
+void Blockchain::addUTXO(const UTXO& utxo) {
+    utxoPool[utxo.getKey()] = utxo;
+}
+
+void Blockchain::spendUTXO(const std::string& txId, int outputIndex) {
+    std::string key = txId + ":" + std::to_string(outputIndex);
+    if (utxoPool.find(key) != utxoPool.end()) {
+        utxoPool[key].markAsSpent();
+    }
+}
+
+std::vector<UTXO> Blockchain::getUTXOsForAddress(const std::string& address) {
+    std::vector<UTXO> result;
+    for (const auto& pair : utxoPool) {
+        const UTXO& utxo = pair.second;
+        if (utxo.getOwner() == address && !utxo.isSpent()) {
+            result.push_back(utxo);
+        }
+    }
+    return result;
+}
+
+bool Blockchain::validateTransaction(const Transaction& transaction) {
+    double inputSum = 0.0;
+    double outputSum = 0.0;
+    
+    // 验证所有输入UTXO
+    for (const auto& input : transaction.getInputs()) {
+        std::string key = input.first + ":" + std::to_string(input.second);
+        if (utxoPool.find(key) == utxoPool.end()) {
+            std::cout << "Invalid input UTXO: " << key << std::endl;
+            return false;
+        }
+        
+        const UTXO& utxo = utxoPool[key];
+        if (utxo.isSpent()) {
+            std::cout << "UTXO already spent: " << key << std::endl;
+            return false;
+        }
+        
+        if (utxo.getOwner() != transaction.getSender()) {
+            std::cout << "UTXO owner mismatch" << std::endl;
+            return false;
+        }
+        
+        inputSum += utxo.getAmount();
+    }
+    
+    // 计算输出总和
+    for (const auto& output : transaction.getOutputs()) {
+        outputSum += output.second;
+    }
+    
+    // 验证输入大于等于输出
+    if (inputSum < outputSum) {
+        std::cout << "Insufficient funds" << std::endl;
+        return false;
+    }
+    
     return true;
 } 

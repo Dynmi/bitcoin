@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(SimpleBitcoin)
+project(HelloBitcoin)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(OpenSSL REQUIRED)
 
 # Add executable
-add_executable(SimpleBitcoin 
+add_executable(HelloBitcoin 
     main.cpp
     Block.cpp
     Transaction.cpp
@@ -17,4 +17,4 @@ add_executable(SimpleBitcoin
 )
 
 # Link OpenSSL
-target_link_libraries(SimpleBitcoin PRIVATE OpenSSL::SSL OpenSSL::Crypto) 
+target_link_libraries(HelloBitcoin PRIVATE OpenSSL::SSL OpenSSL::Crypto) 
